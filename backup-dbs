@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# Sauvegarde des bases de données se trouvant dans un répertoire donné en argument
+
+# On vérifie si l'utilisateur a passé un argument en paramètre
+if [ $# = 1 ]; then
+#On vérifie si cet argument est un répertoire. 
+   if [ -d "$1" ]; then
+      repertoire="$1";
+      #On récupère la date de sauvegarde. et on crée les répertoires de sauvegarde `./sql` et `./mybackups`
+      timestamp=$(date +"%Y%m%d%H%M")
+      #On récupère le repertoire parent du repertoire passer en argument.
+      dir=$(dirname "$1")
+      sql="./sql"
+      mybackups="${dir}/mybackups"
+      nombre_db=0
+      #on crée les répertoires de sauvegarde `./sql` et `./mybackups`
+      mkdir -p "$sql"
+      mkdir -p "$mybackups"
+
+      # On parcourt les répertoires si on trouve un fichier avec l'extension `.db` alors on procède à sa sauvegarde, sa compression au format `.tar.gz` et finalement on supprime tout les fichier `.sql` se trouvant dans les répertoires `sql/` et `mybackups`
+        for db in "$repertoire"/*; do
+             if [[ "$db" == *.db ]];then
+                nom_db=$(basename "$db")
+                # On récupère le nom du fichier à sauvegarder on lui enlève l'extension .db et on renomme le fichier au format db1-YYYYMMDDHHMM.sql
+                nom_db_sauvegarde="${nom_db%.db}-${timestamp}.sql"
+                echo "Export de "$nom_db" sous format SQL ..."
+		#On exporte le fichier sous le nom qu'on a  créé précédemment dans le répertoire sql.
+                sqlite3 "$nom_db" .dump > "${sql}/${nom_db_sauvegarde}"
+
+		#Création de l'archive .tar.gz avec la commande tar dans le répertoire de sauvegarde mybackups
+                tar -czf "${mybackups}/${nom_db_sauvegarde}.tar.gz" "$nom_db"
+                sqlite3 "$nom_db" ".backup '${mybackups}/${nom_db_sauvegarde}"
+
+                archive="${mybackups}/${nom_db_sauvegarde}.tar.gz"
+                echo "Archivage et compression dans "$archive" ..."
+
+                let "nombre_db = $(( $nombre_db + 1 ))"
+             fi
+        done
+        #Si aucune base de donnée ne se trouve dans le répertoire passé en argument on renvoi un message d'erreur avec code 1
+        if [ $nombre_db -le 0 ]; then
+                 echo "Aucune base de données à sauvegarder dans le répertoire "$1" "
+                 exit 1
+        fi
+        rm -r "${mybackups}"/*.sql
+	rm -r "${sql}"/*.sql
+        echo "Supression des fichiers SQL de toutes les bases de données ..."
+        exit 0
+
+    else
+            echo "Usage: ./backup-dbs QLITE3_DBS_DIR"
+            exit 1
+    fi
+else
+#Si l'utilisateur a fourni plus d'un argument en paramètre ou pas du tout on renvoi un message d'erreur avec code 1
+   echo "Usage: ./backup-dbs QLITE3_DBS_DIR"
+   exit 1
+fi
